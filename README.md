@@ -1,93 +1,94 @@
-# GraspDemo
+## Dependencies Installation
+```bash
+# Install airbot configuration package (skip this step on Pro version)
+sudo apt install ./dep/airbot-configure_5.1.6-1_all.deb
+
+# Set up Python virtual environment
+sudo apt install python3-venv
+python3 -m venv venv
+source venv/bin/activate
+
+# Optional:
+mkdir -p ~/.pip && echo -e "[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple" > ~/.pip/pip.conf
+
+# Arm environment installation reference:https://docs.airbots.online/airbot-play/quick-start/software-setup.html
+# Install required packages 
+pip install ./dep/airbot_py-5.1.6-py3-none-any.whl
+# Proxy might be required in command line or you can manually download and install the source code
+pip install -r requirements.txt -i https://mirrors.huaweicloud.com/repository/pypi/simple
+```
+### Hand-Eye Calibration
+**Note:** Default calibration resolution is 480p. Modify `configs/sam_simplegrasp.yaml` to change settings.
+
+#### Run arm server
+```bash
+airbot_server -i can0 -p 50010
+```
+#### Run calib
+
+The calibration board is a 9×11, 20mm black and white chessboard pattern calibration board.
+
+```bash
+python3 airbot_calibration.py  # Use -h flag for help options
+```
+Drag arm to change robot pose, make sure that the chessboard in the camera view, Press `ESC` to capture img and pose.
+
+Calibration Suggestions:Capture images from as many different orientations and positions as possible during calibration. Be careful not to move the arm to its limit positions.
+
+![alt text](assets/image-1.png)
+
+After calibration completes,  The calibration results will be displayed in the command line ,update the corresponding parameters in `configs/sam_simplegrasp.yaml` with the calibration results.
+![Calibration Result](assets/image-2.png)
+
+You can use the following reference parameters under the conditions mentioned below.
+
+Calibration Setup: The arm and the calibration board are placed on a white table at a height of 74.5 cm, and both are on the same plane.
 
 
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+![image-20250718163325802](/home/peng/snap/typora/96/.config/Typora/typora-user-images/image-20250718163325802.png)
 
 ```
-cd existing_repo
-git remote add origin https://git.qiuzhi.tech/Stars/graspdemo.git
-git branch -M main
-git push -uf origin main
+480p:
+    profile: [640, 480, 30]
+    intrinsic:
+      - [604.77563127,   0.        , 318.34741824]
+      - [  0.        , 604.65868699, 249.83140396]
+      - [  0.        ,   0.        ,   1.        ]
+    distortion:
+      - [0.04401480, 0.47978715, -0.00054849, -0.00361947, -1.93856636]
+    extrinsic:
+      - [ 0.00564713, -0.36529553,  0.93087447, -0.15035552]
+      - [-0.99998351, -0.00109528,  0.00563656,  0.03493759]
+      - [-0.00103944, -0.93089096, -0.36529570,  0.10947199]
+      - [ 0.        ,  0.        ,  0.        ,  1.        ]
 ```
 
-## Integrate with your tools
 
-- [ ] [Set up project integrations](https://git.qiuzhi.tech/Stars/graspdemo/-/settings/integrations)
 
-## Collaborate with your team
+#### Run grasp app
+```bash
+source venv/bin/activate
+python3 airbot_interface.py
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+#### Run arm server if not running
 
-## Test and Deploy
+```bash
+airbot_server -i can0 -p 50010
+```
 
-Use the built-in continuous integration in GitLab.
+Basic Usage:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+Click "Capture" to take a snapshot of the scene. Then click on the object in the image at the lower-left corner, and click "Pick and Place" to automatically recognize and perform the grasping action.
 
-***
+![image-20250718163630327](/home/peng/snap/typora/96/.config/Typora/typora-user-images/image-20250718163630327.png)
 
-# Editing this README
+The basic graspable area is shown in the figure below, covering approximately 80% of the workspace.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+![img](https://w79rvfxw83.feishu.cn/space/api/box/stream/download/asynccode/?code=NDhjNmE4MTA0YjJmZTFlMGU4OTc1YzFlYmU3YTBkMGVfbnh5WmUyVWpqeXZvVWpiWlNQaU9UZ0hKZFRvTUduMU5fVG9rZW46Q01mbGJzTUlJb01CZ1Z4cEhqMmNKRFVSbmVjXzE3NTI4MjgxNTQ6MTc1MjgzMTc1NF9WNA)
 
-## Suggestions for a good README
+#### Debug
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+1. If the observe pose and place pose need to be changed, you can enter gravity compensaton mode, drag arm to the property pose, and copy the pose, Modify them in the `config/sam_simplegrasp.yaml`
+![image-20250718164005357](/home/peng/snap/typora/96/.config/Typora/typora-user-images/image-20250718164005357.png)

@@ -1,0 +1,119 @@
+RunTime:
+  dump: True
+  dump_path: 'runtime'
+  auto_stop_cnt: -1 # never stop
+
+Detector:
+  type: "CV2"
+  CvDetector:
+    diff_thresh: 30
+    brightness_thresh: 200
+    min_area: 100
+    max_area: 3000
+    blur_kernel_size: 7
+
+AirbotSegment:
+  device: 'cpu'
+  model_name: "MobileSAM"
+  SAM:
+    model_type: 'vit_b'
+    checkpoint:
+      vit_b:
+        'checkpoint/sam_vit_b.pth'
+  FastSAM:
+    model_type: 'FastSAM-s'
+    checkpoint:
+      FastSAM-s:
+        'checkpoint/FastSAM-s.pt'
+      FastSAM-x:
+        'checkpoint/FastSAM-x.pt'
+  MobileSAM:
+    model_type: 'vit_t'
+    checkpoint:
+      vit_t:
+        'checkpoint/mobile_sam.pt'
+
+AirbotGrasp:
+  camera_type: "Realsense"
+  safe_height_bias: 0.003
+  grasp_depth: 0.04 # gripper in depth
+  observe_pose:
+    - [0.227385, 0.000541, 0.278720]
+    - [-0.010554, 0.479376, -0.006724, 0.877520]
+  place_pose:
+    - [0.155167, 0.462692, 0.173515]
+    - [-0.301532, 0.357147, 0.584357, 0.663363]
+  pre_place_pose:
+    - [0.365120, 0.277567, 0.155785]
+    - [-0.144464, 0.408176, 0.320519, 0.842490]
+
+AirbotYolo:
+  checkpoint: 'checkpoint/yolo_best_0414.pt'
+  verbose: False
+
+ArmParams:
+  port: 50051
+  base_height: 0.005 # m
+  gripper_width: 0.072 # m
+  gripper_length: 0.078 # m
+  od_arm_safe_threshold: 20 # N·m
+  dm_arm_safe_threshold: 15 # N·m
+  gripper_safe_threshold: 10 # N·m
+
+Realsense:
+  resolution: '480p'
+  depth_factor: 1000 # 1000 for uint m, 1 for uint mm
+  720p:
+    profile: [1280, 720, 30]
+    intrinsic:
+      - [610.67200268,   0.        , 322.02450583]
+      - [  0.        , 608.82847031, 247.58588663]
+      - [  0.        ,   0.        ,   1.        ]
+    distortion:
+      - [0.02628418, 0.65410933, -0.00077679, -0.00039511, -2.84610224]
+
+    extrinsic:
+      - [ 0.02502238, -0.49507540,  0.86848962, -0.14029359]
+      - [-0.99950881,  0.00400779,  0.03108182, -0.00719711]
+      - [-0.01886857, -0.86884077, -0.49473194,  0.10267008]
+      - [ 0.        ,  0.        ,  0.        ,  1.        ]
+  480p:
+    profile: [640, 480, 30]
+    intrinsic:
+      - [604.77563127,   0.        , 318.34741824]
+      - [  0.        , 604.65868699, 249.83140396]
+      - [  0.        ,   0.        ,   1.        ]
+
+    distortion:
+      - [0.04401480, 0.47978715, -0.00054849, -0.00361947, -1.93856636]
+
+
+    extrinsic:
+      - [ 0.00564713, -0.36529553,  0.93087447, -0.15035552]
+      - [-0.99998351, -0.00109528,  0.00563656,  0.03493759]
+      - [-0.00103944, -0.93089096, -0.36529570,  0.10947199]
+      - [ 0.        ,  0.        ,  0.        ,  1.        ]
+
+
+
+
+
+
+UsbCam:
+  resolution: '720p'
+  device_id: 0
+  720p:
+    profile: [1280, 720, 30]
+    intrinsic:
+      - [1000.52274956,    0.        , 604.82658303]
+      - [   0.        , 1000.36968905, 340.35678169]
+      - [   0.        ,    0.        ,   1.        ]
+    distortion:
+      - [-0.01903051, 0.01476834, -0.00128409, -0.00243133, 0.02637869]
+    Extrinsic:
+      - [ 0.02502238, -0.49507540,  0.86848962, -0.14029359]
+      - [-0.99950881,  0.00400779,  0.03108182, -0.00719711]
+      - [-0.01886857, -0.86884077, -0.49473194,  0.10267008]
+      - [ 0.        ,  0.        ,  0.        ,  1.        ]
+
+

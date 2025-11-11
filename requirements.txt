@@ -1,0 +1,11 @@
+pyyaml
+opencv-python
+scipy
+numpy
+matplotlib
+torch
+pyrealsense2-beta
+pyqt6
+open3d
+ultralytics
+timm
