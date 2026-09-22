@@ -1,7 +1,9 @@
 # AIRBOT 视觉抓取与语音控制 Demo
 
 - 完整现场操作：[docs/SOP.md](docs/SOP.md)
-- 软件架构说明与架构图：[docs/SOFTWARE_ARCHITECTURE.md](docs/SOFTWARE_ARCHITECTURE.md)
+- 软件架构详细说明：[docs/SOFTWARE_ARCHITECTURE.md](docs/SOFTWARE_ARCHITECTURE.md)
+
+![AIRBOT 语音视觉抓取软件架构](assets/voice_grasp_architecture.png)
 
 ## 目录结构
 
