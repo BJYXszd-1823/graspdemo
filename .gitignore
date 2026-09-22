@@ -1,1 +1,9 @@
 calib/hand_eye_*/
+__pycache__/
+*.pyc
+logs/
+packages/*.whl
+packages/*.deb
+venv/
+venv-*/
+runtime/

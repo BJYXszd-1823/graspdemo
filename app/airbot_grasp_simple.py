@@ -10,6 +10,17 @@ from sklearn.decomposition import PCA
 from utils import plot_gripper, masks_to_boxes
 
 
+def clamp_grasp_z(predicted_z, min_grasp_z):
+    """Keep the commanded tool-center height above the configured table limit."""
+    predicted_z = float(predicted_z)
+    min_grasp_z = float(min_grasp_z)
+    if not np.isfinite(predicted_z) or not np.isfinite(min_grasp_z):
+        raise ValueError("抓取高度和最低抓取高度必须是有限数值")
+    if min_grasp_z < 0:
+        raise ValueError("最低抓取高度不能小于 0")
+    return max(predicted_z, min_grasp_z)
+
+
 class SimpleGrasp:
     def __init__(self):
         self.safe_height_bias = None
@@ -18,6 +29,7 @@ class SimpleGrasp:
         self.gripper_length = None
         self.cam2end = None
         self.grasp_depth = None
+        self.min_grasp_z = None
         self.angle = None     
         self.length_minor = None
 
@@ -35,6 +47,9 @@ class SimpleGrasp:
         self.cam2end = config[camera_type][resolution]["extrinsic"]
         self.grasp_depth = config["AirbotGrasp"]["grasp_depth"]
         self.safe_height_bias = config["AirbotGrasp"]["safe_height_bias"]
+        self.min_grasp_z = config["AirbotGrasp"].get(
+            "min_grasp_z", self.safe_height_bias
+        )
         self.observe_pose = config["AirbotGrasp"]["observe_pose"]
         self.place_pose = config["AirbotGrasp"]["place_pose"]
         self.pre_place_pose = config["AirbotGrasp"]["pre_place_pose"]
@@ -181,7 +196,13 @@ class SimpleGrasp:
         print("time mean: ", time.time() - time1)
             
         gripper_bottom = z_top - self.gripper_length
-        z = gripper_bottom if  gripper_bottom > self.safe_height_bias else self.safe_height_bias
+        predicted_z = max(gripper_bottom, self.safe_height_bias)
+        z = clamp_grasp_z(predicted_z, self.min_grasp_z)
+        if z > predicted_z:
+            print(
+                "grasp z safety clamp: "
+                f"predicted={predicted_z:.6f}, commanded={z:.6f}"
+            )
         trans = np.array([x, y, z])
         # build orient
         limit_angle = np.degrees(np.arctan2(x,y))
@@ -236,7 +257,7 @@ if __name__ == "__main__":
     import time
     import yaml
     import os
-    from airbot_py.arm import AIRBOTPlay, RobotMode
+    from airbot_arm import AirbotArm
     from airbot_camera import RealsenseCamera
     from airbot_segment import AirbotSegment
 
@@ -252,9 +273,11 @@ if __name__ == "__main__":
     
 
     # observe pose
-    with AIRBOTPlay(port=airbot_grasp.robot_port) as robot:
-        robot.switch_mode(RobotMode.PLANNING_POS)
-        robot.move_to_cart_pose(airbot_grasp.observe_pose)
+    robot = AirbotArm(port=airbot_grasp.robot_port)
+    try:
+        robot.move_end_pose(airbot_grasp.observe_pose)
+    finally:
+        robot.close()
     while True:
         # get image
         while True:
@@ -308,38 +331,3 @@ if __name__ == "__main__":
             if cv2.waitKey(0) == 27:
                 cv2.destroyAllWindows()
                 break
-
-        # # get grasp
-        # end_pose = None
-        # with AIRBOTPlay(port=airbot_grasp.robot_port) as robot:
-        #     robot.switch_mode(RobotMode.PLANNING_POS)
-        #     end_pose = robot.get_end_pose()
-        # cloud_cam_raw = realsense.create_point_cloud(depth)
-        # trans, orient, cloud_base = airbot_grasp.inference(
-        #     color_image=color, depth_image=depth, cloud_cam_raw=cloud_cam_raw, end_pose=end_pose, mask=mask
-        # )
-        # o_height = np.max(cloud_base[:, 2])
-        
-        # f = (realsense.intrinsic[0][0] + realsense.intrinsic[1][1]) / 2
-        # y_indices, x_indices = np.where(mask)
-        # mask_center_y = int(np.mean(y_indices))
-        # mask_center_x = int(np.mean(x_indices))
-        # distance = depth[mask_center_y][mask_center_x]
-        # o_width = airbot_grasp.length_minor * (distance / realsense.depth_factor) / f
-
-        # # grasp
-        # with AIRBOTPlay(port=airbot_grasp.robot_port) as robot:
-        #     robot.switch_mode(RobotMode.PLANNING_POS)
-        #     robot.move_eff_pos(1)
-        #     robot.move_to_cart_pose(
-        #         [[trans[0], trans[1], trans[2] + o_height * 2], orient]
-        #     )
-        #     robot.move_to_cart_pose([trans, orient])
-        #     robot.move_eff_pos(0.6 * o_width)
-        #     robot.move_to_cart_pose(
-        #         [[trans[0], trans[1], trans[2] + 0.2], orient]
-        #     )
-        #     robot.move_to_cart_pose(airbot_grasp.pre_place_pose)
-        #     robot.move_to_cart_pose(airbot_grasp.place_pose)
-        #     robot.move_eff_pos(1)
-        #     robot.move_to_cart_pose(airbot_grasp.observe_pose)

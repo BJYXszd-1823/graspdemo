@@ -3,6 +3,7 @@ import numpy as np
 from enum import Enum
 import yaml
 import cv2
+from threading import RLock
 
 class SegmentMode(Enum):
     POINT = 0
@@ -51,29 +52,49 @@ class AirbotSegment():
         self.input_labels = []
         self.bboxs = []
         self.multi_output = False
+        self._lock = RLock()
 
     def add_point(self, x: int, y: int, is_positive: bool):
-        if is_positive:
-            self.input_points.append([x, y])
-            self.input_labels.append(1)
-        else:
-            self.input_points.append([x, y])
-            self.input_labels.append(0)
+        with self._lock:
+            if is_positive:
+                self.input_points.append([x, y])
+                self.input_labels.append(1)
+            else:
+                self.input_points.append([x, y])
+                self.input_labels.append(0)
     
     def add_bbox(self, bbox):
-        self.bboxs.append(bbox)
+        with self._lock:
+            self.bboxs.append(bbox)
     
     def clear_prompt(self):
-        if self.mode == SegmentMode.BBOX:
-            self.bboxs = []
-        elif self.mode == SegmentMode.POINT:
-            self.input_points = []
-            self.input_labels = []
+        with self._lock:
+            if self.mode == SegmentMode.BBOX:
+                self.bboxs = []
+            elif self.mode == SegmentMode.POINT:
+                self.input_points = []
+                self.input_labels = []
+
+    def inference_bbox(self, image, bbox):
+        """Atomically infer one box without changing another workflow's prompt."""
+        with self._lock:
+            previous_mode = self.mode
+            try:
+                self.mode = SegmentMode.BBOX
+                self.bboxs = [bbox]
+                return self.inference(image)
+            finally:
+                self.bboxs = []
+                self.mode = previous_mode
 
     def inference(self, image):
-        if (self.mode == SegmentMode.BBOX and (not self.bboxs or len(self.bboxs) == 0)) or \
-       (self.mode == SegmentMode.POINT and (not self.input_points or not self.input_labels or 
-                                            len(self.input_points) == 0 or len(self.input_labels) == 0)):
+        with self._lock:
+            return self._inference_locked(image)
+
+    def _inference_locked(self, image):
+        if (self.mode == SegmentMode.BBOX and not self.bboxs) or \
+           (self.mode == SegmentMode.POINT and
+            (not self.input_points or not self.input_labels)):
             return None
         
         mask = None
@@ -115,7 +136,7 @@ class AirbotSegment():
                     raw_mask = raw_masks[max_score_idx]
                     
                     mask_resized = cv2.resize(raw_mask, (image.shape[1], image.shape[0]))
-                    mask = mask_resized.astype(np.bool)
+                    mask = mask_resized.astype(bool)
         
         # BBOX模式下清除提示
         if self.mode == SegmentMode.BBOX:

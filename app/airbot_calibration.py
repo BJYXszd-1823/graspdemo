@@ -12,9 +12,9 @@ from scipy.spatial.transform import Rotation as R
 
 try:
     from airbot_camera import RealsenseCamera, USBCamera
-    from airbot_py.arm import AIRBOTPlay, RobotMode
+    from airbot_arm import AirbotArm
 except ImportError as e:
-    print(f"ImportError: Failed to import airbot_py.arm: {e}")
+    print(f"ImportError: Failed to import arm_sdk 5.2.2 integration: {e}")
     sys.exit(1)
 except Exception as e:
     print(f"An unexpected error occurred during import: {e}")
@@ -185,34 +185,35 @@ class AirbotCalibration:
                     return image
         
     def data_collect(self):
-        with AIRBOTPlay(port=args.port) as robot:
-            robot.switch_mode(RobotMode.GRAVITY_COMP)
+        robot = AirbotArm(port=args.port)
+        try:
+            robot.enter_gravity_compensation()
             print("Robot switched to GRAVITY_COMP mode.")
             if args.no_display_mode:
                 print("Running in no-display mode.")
             else:
                 print("Move the robot to capture positions. Press ESC to capture each position.")
-            
-        for i in range(self.chessboard.number_of_image_needed):
-            image = self.choose_image(f"Collect data {i+1}/{self.chessboard.number_of_image_needed}")
-            self.images.append(image)
-            image_name = os.path.join(self.save_path, f"image{i}.png")
-            cv2.imwrite(image_name, image)
-            if self.type == "hand_eye":
-                pose_matrix = None
-                with AIRBOTPlay(port=args.port) as robot:
+
+            for i in range(self.chessboard.number_of_image_needed):
+                image = self.choose_image(f"Collect data {i+1}/{self.chessboard.number_of_image_needed}")
+                self.images.append(image)
+                image_name = os.path.join(self.save_path, f"image{i}.png")
+                cv2.imwrite(image_name, image)
+                if self.type == "hand_eye":
                     pose = robot.get_end_pose()
                     pose_matrix = np.eye(4)
                     pose_matrix[:3, :3] = R.from_quat(pose[1]).as_matrix()
                     pose_matrix[:3, 3] = pose[0]
-                self.end_pose_matrixes.append(pose_matrix)
-                print(f"--Data{i} Saved--\n  Image: {image_name}\n  Pose: {pose_matrix.flatten()}")
-            elif self.type == "intrinsic":
-                print(f"--Data{i} Saved--\n  Image: {image_name}")
-            else:
-                raise ValueError("Unsupported calibration type")
+                    self.end_pose_matrixes.append(pose_matrix)
+                    print(f"--Data{i} Saved--\n  Image: {image_name}\n  Pose: {pose_matrix.flatten()}")
+                elif self.type == "intrinsic":
+                    print(f"--Data{i} Saved--\n  Image: {image_name}")
+                else:
+                    raise ValueError("Unsupported calibration type")
 
-            cv2.destroyAllWindows()
+                cv2.destroyAllWindows()
+        finally:
+            robot.close()
     
     def plot_calibration_result(self, project_errors, image_points, object_points, rvecs, tvecs, mtx, dist):
         plt.figure(figsize=(15,5))
@@ -340,13 +341,6 @@ class AirbotCalibration:
     #         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     #         corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
         
-    #     end_to_base_pose = None
-        
-    #     with AIRBOTPlay(port=args.port) as robot:
-    #         end_to_base_pose = robot.get_end_pose()
-        
-    #     cam_to_base_pose = end_to_base_pose @ self.cam2end
-    
     def report_calibration(self):
         reporter_head = f"""---Calibration Report---
 Camera Type: {args.camera_type}

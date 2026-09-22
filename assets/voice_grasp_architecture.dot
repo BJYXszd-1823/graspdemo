@@ -1,0 +1,163 @@
+digraph VoiceGraspArchitecture {
+  graph [
+    label="AIRBOT 语音视觉抓取 Demo 软件架构",
+    labelloc=t,
+    fontsize=24,
+    fontname="Noto Sans CJK SC",
+    bgcolor="#f7f9fc",
+    color="#94a3b8",
+    penwidth=1.4,
+    pad=0.28,
+    nodesep=0.62,
+    ranksep=0.72,
+    splines=ortho,
+    compound=true,
+    newrank=true,
+    rankdir=TB
+  ];
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#ffffff",
+    color="#8793a6",
+    fontcolor="#1f2937",
+    fontname="Noto Sans CJK SC",
+    fontsize=11,
+    margin="0.16,0.10",
+    penwidth=1.2
+  ];
+  edge [
+    color="#64748b",
+    fontcolor="#475569",
+    fontname="Noto Sans CJK SC",
+    fontsize=9,
+    arrowsize=0.72,
+    penwidth=1.15
+  ];
+
+  operator [
+    label="现场操作员\n颜色语音指令 · 按钮确认 · 手动备用",
+    shape=ellipse,
+    fillcolor="#fff8d9",
+    color="#d6b84c",
+    penwidth=1.5
+  ];
+
+  subgraph cluster_host {
+    label="Ubuntu 主机  /home/su/graspdemo";
+    color="#94a3b8";
+    fillcolor="#eef2f7";
+    style="rounded,filled";
+    penwidth=1.6;
+
+    subgraph cluster_interaction {
+      label="交互入口";
+      color="#7aa2d6";
+      fillcolor="#eaf3ff";
+      style="rounded,filled";
+
+      gui [label="PyQt6 主界面\napp/airbot_interface.py\n实时检测 · 目标状态 · 标签页诊断"];
+      voice_panel [label="语音抓取面板\nvoice_panel.py\n按键录音 · 识别结果 · 人工确认"];
+      {rank=same; gui; voice_panel;}
+    }
+
+    subgraph cluster_control {
+      label="任务编排与安全控制";
+      color="#dfb842";
+      fillcolor="#fff8dd";
+      style="rounded,filled";
+
+      voice_gateway [
+        label="语音指令网关\nJSON 协议 · 安全白名单 · 已审核错词\n否定 / 转述 / 组合 / 环境语音拒绝"
+      ];
+      controller [
+        label="中央控制器  AirbotControlInterface\n唯一颜色目标 · 同步快照 · 抓取 · 夹爪 · 观察位\n人工确认 · 忙碌互斥 · 时效/深度/掩码失败拦截",
+        penwidth=1.6,
+        color="#c99c22",
+        fillcolor="#fffdf5"
+      ];
+      threads [
+        label="任务线程\nObserve · Detection · ColorGraspPreparation · RobotGrasp\n最新帧推理 · 自动分割 · 抓取/放置编排"
+      ];
+      {rank=same; voice_gateway; controller; threads;}
+    }
+
+    subgraph cluster_services {
+      label="领域能力";
+      color="#67aa88";
+      fillcolor="#eef9f3";
+      style="rounded,filled";
+
+      voice_service [
+        label="常驻本地语音识别\napp/voice_asr_worker.py\nsounddevice / soundfile · Paraformer-zh\n预加载一次 · 静音自动结束 · 无需 API key",
+        color="#aa7bcc",
+        fillcolor="#f7f0fb"
+      ];
+      vision_service [
+        label="实时视觉抓取流水线\nRGB-D → YOLO block/cube → HSV 蓝/绿\n唯一目标 → MobileSAM 框选分割 → 点云/PCA\nYAML 颜色阈值 + 标定 + 模型权重",
+        color="#4f9f78",
+        fillcolor="#f8fffb"
+      ];
+      robot_service [
+        label="机械臂任务执行\n观察位 · 轨迹运动 · 夹爪开合 · 放置\n单一 Lease · 阻塞动作 · arm-sdk 5.2.2",
+        color="#7e68b8",
+        fillcolor="#f8f5ff"
+      ];
+      {rank=same; voice_service; vision_service; robot_service;}
+    }
+
+    subgraph cluster_adapters {
+      label="设备与协议适配";
+      color="#9b7ad1";
+      fillcolor="#f2edff";
+      style="rounded,filled";
+
+      audio_adapter [label="ALSA / PipeWire\n16 kHz 单声道输入"];
+      camera_adapter [label="pyrealsense2\nUSB RGB-D 驱动"];
+      robot_adapter [label="airbot-arm 5.2.2\ngRPC 50051 ↔ CAN"];
+      {rank=same; audio_adapter; camera_adapter; robot_adapter;}
+    }
+  }
+
+  subgraph cluster_devices {
+    label="外部设备边界";
+    color="#e59a9a";
+    fillcolor="#fff7f7";
+    style="rounded,dashed,filled";
+
+    microphone [label="麦克风\n板载 / USB / PipeWire"];
+    realsense [label="Intel RealSense\n彩色 + 深度相机"];
+    robot_hw [label="CAN 总线 → AIRBOT Play → 末端夹爪\n硬件急停直接作用于设备（不经过语音软件）"];
+    {rank=same; microphone; realsense; robot_hw;}
+  }
+
+  legend [
+    label="阅读方向：自上而下\n实线 = 数据或控制调用    双箭头 = 请求与结果",
+    shape=note,
+    fillcolor="#ffffff",
+    color="#b6becb",
+    fontsize=9
+  ];
+
+  operator -> gui;
+  operator -> voice_panel;
+
+  voice_panel -> voice_gateway;
+  gui -> controller;
+  voice_gateway -> controller;
+  controller -> threads;
+
+  voice_gateway -> voice_service [dir=both, arrowtail=normal];
+  controller -> vision_service [dir=both, arrowtail=normal];
+  threads -> robot_service;
+
+  voice_service -> audio_adapter;
+  vision_service -> camera_adapter;
+  robot_service -> robot_adapter;
+
+  audio_adapter -> microphone;
+  camera_adapter -> realsense;
+  robot_adapter -> robot_hw;
+
+  robot_hw -> legend [style=invis];
+}
