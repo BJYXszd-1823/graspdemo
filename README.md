@@ -45,6 +45,8 @@ graspdemo/
 ```
 
 完整安装和排障步骤见 [docs/SOP.md](docs/SOP.md)。
+
+程序同时支持 RealSense 和普通 USB RGB 相机。默认 `Camera.type: realsense`；使用普通 RGB 相机时，将 `configs/sam_simplegrasp.yaml` 中的 `Camera.type` 改为 `usb_rgb`，并按 SOP 标定 `UsbCam` 的内参、手眼外参和固定桌面高度。RGB 模式适用于单层固定桌面，不提供真实深度，不能替代 RealSense 处理堆叠物体。
 ### Hand-Eye Calibration
 **Note:** Default calibration resolution is 480p. Modify `configs/sam_simplegrasp.yaml` to change settings.
 

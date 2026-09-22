@@ -42,7 +42,8 @@ class SimpleGrasp:
         self.gripper_width = config["ArmParams"]["gripper_width"]
         self.gripper_length = config["ArmParams"]["gripper_length"]
         
-        camera_type = config["AirbotGrasp"]["camera_type"]
+        camera_type = config.get("Camera", {}).get(
+            "calibration_type", config["AirbotGrasp"]["camera_type"])
         resolution = config[camera_type]["resolution"]
         self.cam2end = config[camera_type][resolution]["extrinsic"]
         self.grasp_depth = config["AirbotGrasp"]["grasp_depth"]

@@ -1,10 +1,16 @@
-import pyrealsense2 as rs
 import numpy as np
 import yaml
 import cv2
+from scipy.spatial.transform import Rotation
+
+try:
+    import pyrealsense2 as rs
+except ImportError:
+    rs = None
 
 
 class RealsenseCamera:
+    has_hardware_depth = True
     __unaligned_warning_printed = False
 
     def __init__(self) -> None:
@@ -22,6 +28,8 @@ class RealsenseCamera:
         self.init()
     
     def init(self):
+        if rs is None:
+            raise RuntimeError("RealSense 模式需要 pyrealsense2；普通 RGB 相机请设置 Camera.type=usb_rgb")
         # Configure streams
         self.pipeline = rs.pipeline()
         rs_config = rs.config()
@@ -136,7 +144,8 @@ class RealsenseCamera:
                 "Param frame_type should be 'str | list[str]'"
             )
 
-    def create_point_cloud(self, depth: np.ndarray, organized: bool = True):
+    def create_point_cloud(self, depth: np.ndarray, organized: bool = True,
+                           end_pose=None):
         """Generate point cloud using depth image only.
 
         Input:
@@ -166,7 +175,8 @@ class RealsenseCamera:
 
 
 class USBCamera:
-    """USB Camera class for Airbot Calibration"""
+    """普通 USB RGB 相机；抓取时使用已标定的固定桌面平面。"""
+    has_hardware_depth = False
     
     def __init__(self):
         """Initialize USB camera with resolution settings"""
@@ -178,10 +188,18 @@ class USBCamera:
         self.device_id = config["UsbCam"]["device_id"]
         self.resolution = config["UsbCam"]["resolution"]
         self.profile = config["UsbCam"][self.resolution]["profile"]
-        self.intrinsic = config["UsbCam"][self.resolution]["intrinsic"]
-        self.distortion = config["UsbCam"][self.resolution]["distortion"]
-        
-        self.WIDTH, self.HEIGHT = 1280, 720
+        self.intrinsic = np.asarray(config["UsbCam"][self.resolution]["intrinsic"], dtype=float)
+        self.distortion = np.asarray(config["UsbCam"][self.resolution]["distortion"], dtype=float)
+        profile_config = config["UsbCam"][self.resolution]
+        # Existing calibration files used both spellings; accept either so
+        # USB-camera setup does not fail before the first frame is read.
+        extrinsic = profile_config.get("extrinsic", profile_config.get("Extrinsic"))
+        if extrinsic is None:
+            raise ValueError("UsbCam calibration requires an extrinsic matrix")
+        self.cam2end = np.asarray(extrinsic, dtype=float)
+        self.table_z_base = float(config["UsbCam"].get("table_z_base", 0.01338870424854599))
+        self.depth_factor = 1.0
+        self.WIDTH, self.HEIGHT, self.FPS = self.profile
         
         self.cap = None
         self._initialize_camera()
@@ -224,18 +242,62 @@ class USBCamera:
         if not ret:
             raise RuntimeError("Failed to capture frame from USB camera")
             
-        # For compatibility with the existing interface, handle frame_type
-        if frame_type.lower() == "bgr":
-            return frame
-        elif frame_type.lower() == "rgb":
-            return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        else:
-            return frame
+        frames = {
+            "bgr": frame,
+            "rgb": cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+            "depth": np.zeros(frame.shape[:2], dtype=np.float32),
+            "depth_map": np.zeros_like(frame),
+        }
+        if isinstance(frame_type, list):
+            return [frames[item] for item in frame_type]
+        if frame_type not in frames:
+            raise TypeError("Invalid frame_type, candidate type: ['rgb', 'bgr', 'depth', 'depth_map']")
+        return frames[frame_type]
+
+    def create_point_cloud(self, depth, organized=True, end_pose=None):
+        """Create points by intersecting camera rays with the calibrated table plane."""
+        if end_pose is None:
+            raise ValueError("普通 RGB 相机需要机械臂末端位姿才能计算桌面坐标")
+        end2base = np.eye(4)
+        end2base[:3, :3] = Rotation.from_quat(end_pose[1]).as_matrix()
+        end2base[:3, 3] = end_pose[0]
+        cam2base = end2base @ self.cam2end
+        xmap, ymap = np.meshgrid(np.arange(self.WIDTH), np.arange(self.HEIGHT))
+        rays = np.stack(((xmap - self.intrinsic[0, 2]) / self.intrinsic[0, 0],
+                         (ymap - self.intrinsic[1, 2]) / self.intrinsic[1, 1],
+                         np.ones_like(xmap, dtype=float)), axis=-1)
+        rays_base = rays @ cam2base[:3, :3].T
+        scale = np.divide(self.table_z_base - cam2base[2, 3], rays_base[..., 2],
+                          out=np.full(rays_base.shape[:2], np.nan),
+                          where=np.abs(rays_base[..., 2]) > 1e-8)
+        scale[scale <= 0] = np.nan
+        points = rays * scale[..., None]
+        points[~np.isfinite(points)] = 0
+        return points.astype(np.float32) if organized else points.reshape(-1, 3).astype(np.float32)
+
+    def deinit(self) -> bool:
+        """Release the USB camera using the same lifecycle as RealSense."""
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
+        return True
     
     def __del__(self):
         """Clean up camera resources"""
         if self.cap and self.cap.isOpened():
             self.cap.release()
+
+
+def create_camera():
+    with open("configs/config_file.yaml", "r") as file:
+        config_path = yaml.safe_load(file)["Path"]
+    config = yaml.safe_load(open(config_path, "r"))
+    camera_type = str(config.get("Camera", {}).get("type", "realsense")).lower()
+    if camera_type == "realsense":
+        return RealsenseCamera()
+    if camera_type in {"usb_rgb", "rgb", "usbcam"}:
+        return USBCamera()
+    raise ValueError("Camera.type 仅支持 realsense 或 usb_rgb")
 
 
 if __name__ == "__main__":

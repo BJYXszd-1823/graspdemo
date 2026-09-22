@@ -30,7 +30,7 @@ from voice_panel import VoiceCommandPanel
 try:
     from airbot_arm import (AirbotArm, AirbotMonitor, GripperContactTimeout,
                             SpeedProfile, describe_eef_status)
-    from airbot_camera import RealsenseCamera
+    from airbot_camera import RealsenseCamera, create_camera
     from airbot_segment import AirbotSegment, SegmentMode
     from airbot_grasp_simple import SimpleGrasp
     from airbot_yolo import (AirbotYolo, COLOR_LABELS, DetectionStabilizer,
@@ -186,10 +186,12 @@ class ColorGraspPreparationThread(QThread):
                 "min_mask_in_box_ratio", 0.50))
             if mask_in_box_ratio < required_ratio:
                 raise ValueError("分割掩码与选中检测框不一致")
-            valid_depth = snapshot.depth[mask] > 0
-            if np.count_nonzero(valid_depth) < max(20, int(mask_area * 0.25)):
-                raise ValueError("目标区域没有足够的有效深度")
-            cloud = self.interface.realsense.create_point_cloud(snapshot.depth)
+            if self.interface.realsense.has_hardware_depth:
+                valid_depth = snapshot.depth[mask] > 0
+                if np.count_nonzero(valid_depth) < max(20, int(mask_area * 0.25)):
+                    raise ValueError("目标区域没有足够的有效深度")
+            cloud = self.interface.realsense.create_point_cloud(
+                snapshot.depth, end_pose=[snapshot.state["trans"], snapshot.state["orient"]])
             pose = [snapshot.state["trans"], snapshot.state["orient"]]
             trans, orient, cloud_base = self.interface.airbot_grasp.inference(
                 color_image=snapshot.color, depth_image=snapshot.depth,
@@ -198,11 +200,14 @@ class ColorGraspPreparationThread(QThread):
                 raise ValueError("抓取位姿计算失败")
             y_indices, x_indices = np.where(mask)
             center_y, center_x = int(np.mean(y_indices)), int(np.mean(x_indices))
-            distance = snapshot.depth[center_y][center_x]
-            focal = (self.interface.realsense.intrinsic[0][0]
-                     + self.interface.realsense.intrinsic[1][1]) / 2
-            width = (self.interface.airbot_grasp.length_minor
-                     * (distance / self.interface.realsense.depth_factor) / focal)
+            if self.interface.realsense.has_hardware_depth:
+                distance = snapshot.depth[center_y][center_x]
+                focal = (self.interface.realsense.intrinsic[0][0]
+                         + self.interface.realsense.intrinsic[1][1]) / 2
+                width = (self.interface.airbot_grasp.length_minor
+                         * (distance / self.interface.realsense.depth_factor) / focal)
+            else:
+                width = float(np.ptp(cloud_base[:, 0]))
             info = {
                 "trans": np.asarray(trans).tolist(),
                 "orient": np.asarray(orient).tolist(),
@@ -240,7 +245,7 @@ class ObserveThread(QThread):
                 if "Device disconnected" in str(e):
                     print("Reconnecting to the camera...")
                     del self.interface.realsense
-                    self.interface.realsense = RealsenseCamera()
+                    self.interface.realsense = create_camera()
                     self.camera = self.interface.realsense
            
             pose = [[],[]]
@@ -604,7 +609,7 @@ class AutoGraspThread(QThread):
                 self.grasping_mask = mask
                 self.grasping_object = object_label
                 
-                cloud = self.realsense.create_point_cloud(captured_depth)
+                cloud = self.realsense.create_point_cloud(captured_depth, end_pose=captured_pose)
                 if cloud.shape[0] == 0:
                     self.log.emit("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                     self.capture_signal.emit()
@@ -646,12 +651,16 @@ class AutoGraspThread(QThread):
                     continue
                 
                 object_height = np.max(cloud_base[:,2])
-                f = (self.realsense.intrinsic[0][0] + self.realsense.intrinsic[1][1]) / 2
-                y_indices, x_indices = np.where(mask)
-                mask_center_y = int(np.mean(y_indices))
-                mask_center_x = int(np.mean(x_indices))
-                distance = captured_depth[mask_center_y][mask_center_x]
-                object_width = self.airbot_grasp.length_minor * (distance / self.realsense.depth_factor) / f
+                if self.realsense.has_hardware_depth:
+                    f = (self.realsense.intrinsic[0][0] + self.realsense.intrinsic[1][1]) / 2
+                    y_indices, x_indices = np.where(mask)
+                    mask_center_y = int(np.mean(y_indices)
+                    )
+                    mask_center_x = int(np.mean(x_indices))
+                    distance = captured_depth[mask_center_y][mask_center_x]
+                    object_width = self.airbot_grasp.length_minor * (distance / self.realsense.depth_factor) / f
+                else:
+                    object_width = float(np.ptp(cloud_base[:, 0]))
                 pbject_angle = self.airbot_grasp.angle
                 
                 predicted_info = {
@@ -726,7 +735,7 @@ class AirbotControlInterface(QMainWindow):
         self.selected_detection_bbox = None
         
         # 初始化相机和分割模块
-        self.realsense = RealsenseCamera()
+        self.realsense = create_camera()
         self.frame_width = self.realsense.WIDTH
         self.frame_height = self.realsense.HEIGHT
         self.airbot_segment = AirbotSegment()
@@ -743,7 +752,7 @@ class AirbotControlInterface(QMainWindow):
         self.running = True
         
         # 初始化GUI
-        if self.realsense.resolution == "480p":
+        if getattr(self.realsense, "resolution", "") == "480p":
             factor = 1
         else:
             factor = 2
@@ -1314,7 +1323,7 @@ class AirbotControlInterface(QMainWindow):
             pose = self.captured_pose.copy()
 
         # 计算抓取位姿
-        cloud = self.realsense.create_point_cloud(depth)
+        cloud = self.realsense.create_point_cloud(depth, end_pose=pose)
         trans, orient, cloud_base = self.airbot_grasp.inference(
             color_image=color, 
             depth_image=depth, 
@@ -1326,12 +1335,15 @@ class AirbotControlInterface(QMainWindow):
         print(trans, orient)
         
         object_height = np.max(cloud_base[:,2])
-        f = (self.realsense.intrinsic[0][0] + self.realsense.intrinsic[1][1]) / 2
-        y_indices, x_indices = np.where(mask_map)
-        mask_center_y = int(np.mean(y_indices))
-        mask_center_x = int(np.mean(x_indices))
-        distance = depth[mask_center_y][mask_center_x]
-        object_width = self.airbot_grasp.length_minor * (distance / self.realsense.depth_factor) / f
+        if self.realsense.has_hardware_depth:
+            f = (self.realsense.intrinsic[0][0] + self.realsense.intrinsic[1][1]) / 2
+            y_indices, x_indices = np.where(mask_map)
+            mask_center_y = int(np.mean(y_indices))
+            mask_center_x = int(np.mean(x_indices))
+            distance = depth[mask_center_y][mask_center_x]
+            object_width = self.airbot_grasp.length_minor * (distance / self.realsense.depth_factor) / f
+        else:
+            object_width = float(np.ptp(cloud_base[:, 0]))
         object_angle = self.airbot_grasp.angle
         
         masked_color = np.ones_like(color)

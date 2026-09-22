@@ -2,7 +2,7 @@
 
 适用目录：`/home/su/graspdemo`
 
-适用功能：RealSense 视觉采集、YOLO 实时积木检测、蓝/绿颜色判定、MobileSAM 自动分割、抓取位姿计算、AIRBOT Play 抓取与放置，以及 FunASR 中文语音指令输入。鼠标选择保留为备用流程。
+适用功能：RealSense 或普通 USB RGB 相机视觉采集、YOLO 实时积木检测、蓝/绿颜色判定、MobileSAM 自动分割、抓取位姿计算、AIRBOT Play 抓取与放置，以及 FunASR 中文语音指令输入。鼠标选择保留为备用流程。
 
 > 安全原则：首次联调必须关闭“语音识别后直接执行”。GUI 启动时会自动驱动机械臂到配置的观察位，因此启动 GUI 不是离线操作。急停只能使用硬件急停或既有控制器的停止方式，“取消语音”和语音“停止”都不是急停。
 
@@ -26,6 +26,32 @@
 
 语音识别使用本地 FunASR，不需要 OpenAI、DeepSeek、公司 API key 或 Ollama。
 应用源码统一位于 `app/`，离线测试位于 `tests/`，文档位于 `docs/`；操作时仍从工程根目录执行脚本，避免相对配置和模型路径失效。`vendor/legacy/` 仅保存旧版 wheel，不参与 5.2.2 安装。
+
+### 相机选择
+
+默认配置使用 RealSense：
+
+```yaml
+Camera:
+  type: realsense
+  calibration_type: Realsense
+```
+
+普通 USB RGB 相机使用：
+
+```yaml
+Camera:
+  type: usb_rgb
+  calibration_type: UsbCam
+```
+
+同时必须修改 `UsbCam` 下对应分辨率的 `intrinsic`、`distortion`、`extrinsic`，以及 `UsbCam.table_z_base`。其中 `table_z_base` 是机械臂基座坐标系下桌面高度，单位为米。RGB 模式通过相机射线与固定桌面平面求交得到抓取位置，不使用真实深度；适用于相机固定、桌面高度固定、积木单层摆放的场景，不适用于堆叠或悬空物体。标定可使用：
+
+```bash
+PYTHONPATH=app ./venv/bin/python app/airbot_calibration.py --camera-type usbcam
+```
+
+标定输出的内参和手眼外参必须写回 `configs/sam_simplegrasp.yaml` 后再启动程序。普通 RGB 模式仍需要机械臂服务和末端位姿同步，因此不是“插上摄像头即可安全抓取”。
 
 ## 2. 5.2.2 软件环境准备
 
@@ -208,7 +234,7 @@ cd /home/su/graspdemo
 
 启动后的正常现象：
 
-1. GUI 打开并显示 RealSense 实时画面。
+1. GUI 打开并显示配置的相机实时画面（RealSense 或 USB RGB）。
 2. 机械臂移动到 `observe_pose`。
 3. 日志出现“已移动到观察姿态”。
 4. 右侧语音面板先显示模型加载，约 8–10 秒后显示“语音模型已就绪”。
@@ -252,7 +278,7 @@ cd /home/su/graspdemo
 
 1. 首次仅放置一个蓝色积木，机械臂选择 `SLOW`，不勾选直接执行。
 2. 说“抓取蓝色积木”，核对文字和右侧目标信息后手动确认。
-3. 程序会固定同一帧 RGB、深度、位姿和检测框，使用 MobileSAM 自动分割；目标过期、分割/深度无效时不会运动。
+3. 程序会固定同一帧 RGB、相机数据、位姿和检测框，使用 MobileSAM 自动分割；目标过期、分割无效或 RGB 平面坐标无效时不会运动。
 4. 持续观察机械臂：打开夹爪 → 目标上方 → 下探 → 闭合 → 抬起 → 放置 → 返回观察位。
 5. 蓝色成功后，仅放置一个绿色积木，重复同样的低速验证。
 6. 最后放入两个同色积木并发出对应指令，确认界面提示目标不唯一且机械臂不运动。
@@ -294,7 +320,7 @@ cd /home/su/graspdemo
 | 麦克风无输入 | 重新执行 `--list-devices` | 换成有输入通道的设备，或清除 `GRASP_VOICE_DEVICE` 使用默认设备 |
 | FunASR 首次很慢 | 先在终端执行第 4.2 节 | 等模型下载及缓存完成，再启动 GUI |
 | GUI 缺少 PyQt6/SDK/视觉模块 | `./venv/bin/python -c "import PyQt6, arm_sdk, cv2, torch"` | 执行 `./install.sh --skip-system` 修复项目统一环境 |
-| 无 RealSense 画面 | `lsusb` 并检查线缆 | 重插相机，关闭占用相机的其他程序后重启 GUI |
+| 无相机画面 | RealSense 用 `lsusb`；USB RGB 检查 `UsbCam.device_id` 和 `/dev/video*` | 重插相机、修改设备编号，关闭占用相机的其他程序后重启 GUI |
 | 无法连接机械臂服务 | 对照配置端口并执行 `ss -ltnp \| grep ':50051'` | 确认 CAN、服务进程和端口一致 |
 | 颜色积木未识别/识别错 | 查看右侧颜色覆盖率 | 保持稳定照明，现场校准 `RealtimeDetection.colors` 与覆盖率阈值 |
 | 提示目标不唯一 | 查看同色目标数量 | 移除多余同色积木，系统不会自行猜测 |
@@ -319,7 +345,7 @@ cd /home/su/graspdemo
 
 - [ ] 固定指令离线测试通过
 - [ ] 麦克风录音与中文识别通过
-- [ ] RealSense 彩色图和深度图正常
+- [ ] 配置的相机彩色图正常；RealSense 另外确认深度图，USB RGB 另外确认桌面平面标定
 - [ ] 蓝色/绿色积木实时检测与 HSV 覆盖率已现场校准
 - [ ] 两个同色目标时正确拒绝抓取
 - [ ] 观察位运动正确
