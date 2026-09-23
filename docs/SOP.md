@@ -4,7 +4,7 @@
 
 适用功能：RealSense 或普通 USB RGB 相机视觉采集、YOLO 实时积木检测、蓝/绿颜色判定、MobileSAM 自动分割、抓取位姿计算、AIRBOT Play 抓取与放置，以及 FunASR 中文语音指令输入。鼠标选择保留为备用流程。
 
-> 安全原则：首次联调必须关闭“语音识别后直接执行”。GUI 启动时会自动驱动机械臂到配置的观察位，因此启动 GUI 不是离线操作。急停只能使用硬件急停或既有控制器的停止方式，“取消语音”和语音“停止”都不是急停。
+> 以下实机安全原则适用于 `./run_grasp.sh`；纯仿真请直接按第 10 节执行 `./run_sim.sh`，不会连接真机。首次联调必须关闭“语音识别后直接执行”。GUI 启动时会自动驱动机械臂到配置的观察位，因此启动 GUI 不是离线操作。急停只能使用硬件急停或既有控制器的停止方式，“取消语音”和语音“停止”都不是急停。
 
 ## 1. 系统组成与关键路径
 
@@ -193,7 +193,7 @@ PYTHONPATH=app ./venv/bin/python app/voice_commands.py --text '打开假爪'
 ./run_tests.sh
 ```
 
-预期分别输出 `open_gripper`、`open_gripper`、`grasp_blue`，测试结果为 `OK`。这些命令不连接机械臂或相机，也不会运动。
+预期两个解析命令均输出 `open_gripper`，测试结果为 `OK`。这些命令不连接机械臂或相机，也不会运动。
 
 ### 4.2 验证录音和识别
 
@@ -329,7 +329,43 @@ cd /home/su/graspdemo
 | 预测失败 | 查看日志、深度图和目标是否在有效区域 | 重新摆放物体、拍照、选择；预测失败时程序不会启动抓取 |
 | 运动异常或有碰撞风险 | 立即使用硬件急停 | 排除原因前不得重试；“取消语音”不能停止已开始的运动 |
 
-## 10. 正常停机
+## 10. DISCOVERSE 仿真验证（不连接真机）
+
+仿真入口用于在没有机械臂、CAN、RealSense 和 `airbot-arm` 服务时验证语音与视觉抓取流程。它使用 DISCOVERSE 的 AIRBOT Play/MuJoCo 模型，默认加载与真机相同的 YOLO 权重 `checkpoint/yolo_best_0414.pt`、MobileSAM 权重 `checkpoint/mobile_sam.pt` 和 FunASR。YOLO 与 MobileSAM 都使用机械臂末端 `eye_arm` 相机；界面上方显示第三视角，下方显示末端相机第一视角。
+
+仿真安装和启动：
+
+```bash
+cd /home/su/graspdemo
+./install_sim.sh
+./run_sim.sh
+```
+
+仅文字控制但仍运行完整的末端相机 YOLO → MobileSAM → SimpleGrasp → 物理抓放流程：
+
+```bash
+./run_sim.sh --no-voice
+./run_sim.sh --yolo-checkpoint /absolute/path/to/best.pt
+```
+
+无窗口验证需要 EGL：
+
+```bash
+./run_sim.sh --headless --text '抓取蓝色积木'
+./run_sim.sh --headless --text '抓取绿色积木'
+GRASP_TEST_YOLO_SIM=1 MUJOCO_GL=egl MPLBACKEND=Agg PYTHONPATH=app \
+  ./venv/bin/python -m unittest -v tests.test_discoverse_vision tests.test_discoverse_sim
+```
+
+仿真会复用以下真机流程：连续帧确认和唯一目标检查、MobileSAM 框选分割、掩码与深度校验、点云和手眼变换、`SimpleGrasp` 的 PCA 抓取角度/宽度、10 cm 预抓取位、直线下降与抬升、夹爪接触确认/收紧重试、公共放置位以及失败恢复。仿真使用自己的 `configs/discoverse_sim.yaml` 校正 MuJoCo 工具坐标和最低抓取高度，不修改真机配置。
+
+仿真成功可作为软件流程回归依据，不能替代真机验收。仿真控制器、工具坐标、相机内外参、深度噪声、摩擦、控制延迟和 SDK 夹爪反馈与真机仍有差异；仿真中的放置区占用和物体抬升检查属于评估逻辑。每次真机模型、标定、相机安装、SDK 或照明改变后，仍需按本 SOP 的现场安全检查、低速单物体抓取和急停流程重新验收。
+
+仿真环境光已从 0.40 适度调至 0.42，避免改变当前 YOLO/MobileSAM 的颜色和分割效果。若修改 `app/discoverse_sim.py` 中的灯光，必须重新运行 YOLO 置信度、分割和蓝/绿抓放测试，不要仅凭第三视角画面判断仿真有效。
+
+详细仿真参数和排障见 [DISCOVERSE.md](DISCOVERSE.md)。仿真停机只需关闭窗口，无需停止机械臂服务。
+
+## 11. 正常停机
 
 1. 等待当前抓取完整结束，机械臂回到观察位。
 2. 关闭 GUI 窗口，等待相机线程和抓取线程退出。
@@ -339,11 +375,12 @@ cd /home/su/graspdemo
 
 不要在机械臂运动过程中直接关闭终端或断电；紧急情况使用硬件急停。
 
-## 11. 验收记录
+## 12. 验收记录
 
 每次首次部署或更改标定、模型、SDK、机械臂、相机安装位置后，建议逐项记录：
 
 - [ ] 固定指令离线测试通过
+- [ ] DISCOVERSE 仿真双视角、末端相机 YOLO/MobileSAM 和蓝/绿物理抓放测试通过（仅软件回归，不替代真机验收）
 - [ ] 麦克风录音与中文识别通过
 - [ ] 配置的相机彩色图正常；RealSense 另外确认深度图，USB RGB 另外确认桌面平面标定
 - [ ] 蓝色/绿色积木实时检测与 HSV 覆盖率已现场校准

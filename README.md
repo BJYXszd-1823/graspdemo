@@ -1,5 +1,6 @@
 # AIRBOT 视觉抓取与语音控制 Demo
 
+- DISCOVERSE 语音抓取仿真：[安装与操作说明](docs/DISCOVERSE.md)；启动 `./run_sim.sh`（首次执行 `./install_sim.sh`）。默认在机械臂末端相机上使用你的 `checkpoint/yolo_best_0414.pt`，复用 MobileSAM、SimpleGrasp 和十步抓放流程；可用 `--yolo-checkpoint /path/to/best.pt` 切换权重。
 - 完整现场操作：[docs/SOP.md](docs/SOP.md)
 - 软件架构详细说明：[docs/SOFTWARE_ARCHITECTURE.md](docs/SOFTWARE_ARCHITECTURE.md)
 

@@ -15,7 +15,8 @@ class AirbotSegment():
     def __init__(self) -> None:
         with open("configs/config_file.yaml", "r") as file:
             config_path = yaml.safe_load(file)["Path"]
-        config = yaml.safe_load(open(config_path, "r"))
+        with open(config_path, "r") as file:
+            config = yaml.safe_load(file)
         
         self.model_name = config["AirbotSegment"]["model_name"] 
         model_type = config["AirbotSegment"][self.model_name]["model_type"]

@@ -7,3 +7,5 @@ packages/*.deb
 venv/
 venv-*/
 runtime/
+
+vendor/DISCOVERSE/

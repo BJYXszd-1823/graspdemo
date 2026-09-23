@@ -14,10 +14,13 @@ export PYTHONPATH="$PROJECT_DIR/app${PYTHONPATH:+:$PYTHONPATH}"
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
 
 "$PYTHON" -m unittest -v \
+    tests.test_discoverse_sim \
+    tests.test_discoverse_vision \
     tests.test_airbot_arm \
     tests.test_airbot_yolo \
     tests.test_grasp_recovery \
     tests.test_grasp_safety \
+    tests.test_grasp_preparation \
     tests.test_place_pose \
     tests.test_realtime_pipeline \
     tests.test_voice_asr_worker \

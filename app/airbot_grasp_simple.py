@@ -22,7 +22,7 @@ def clamp_grasp_z(predicted_z, min_grasp_z):
 
 
 class SimpleGrasp:
-    def __init__(self):
+    def __init__(self, config=None):
         self.safe_height_bias = None
         self.base_height = None
         self.gripper_width = None
@@ -33,9 +33,11 @@ class SimpleGrasp:
         self.angle = None     
         self.length_minor = None
 
-        with open("configs/config_file.yaml", "r") as file:
-            config_path = yaml.safe_load(file)["Path"]
-        config = yaml.safe_load(open(config_path, "r"))
+        if config is None:
+            with open("configs/config_file.yaml", "r") as file:
+                config_path = yaml.safe_load(file)["Path"]
+            with open(config_path, "r") as file:
+                config = yaml.safe_load(file)
         
         self.robot_port = config["ArmParams"]["port"]
         self.base_height = config["ArmParams"]["base_height"]

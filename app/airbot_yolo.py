@@ -249,7 +249,7 @@ def classify_block_color(image, bbox, config=None):
 
 
 class AirbotYolo:
-    def __init__(self, model_factory=YOLO):
+    def __init__(self, model_factory=YOLO, *, checkpoint=None):
         with open("configs/config_file.yaml", "r", encoding="utf-8") as file:
             config_path = yaml.safe_load(file)["Path"]
         with open(config_path, "r", encoding="utf-8") as file:
@@ -258,7 +258,8 @@ class AirbotYolo:
         self.verbose = yolo_config.get("verbose", False)
         self.detection_config = {
             **DEFAULT_DETECTION_CONFIG, **config.get("RealtimeDetection", {})}
-        self.model = model_factory(model=yolo_config["checkpoint"])
+        self.checkpoint = checkpoint or yolo_config["checkpoint"]
+        self.model = model_factory(model=self.checkpoint)
         self.result = None
         self._inference_lock = RLock()
 
