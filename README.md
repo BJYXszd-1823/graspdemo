@@ -76,7 +76,7 @@ Calibration Setup: The arm and the calibration board are placed on a white table
 
 
 
-![image-20250718163325802](/home/peng/snap/typora/96/.config/Typora/typora-user-images/image-20250718163325802.png)
+![标定参考参数](assets/image-3.png)
 
 ```
 480p:
@@ -111,16 +111,16 @@ Basic Usage:
 
 Click "Capture" to take a snapshot of the scene. Then click on the object in the image at the lower-left corner, and click "Pick and Place" to automatically recognize and perform the grasping action.
 
-![image-20250718163630327](/home/peng/snap/typora/96/.config/Typora/typora-user-images/image-20250718163630327.png)
+![抓取界面示例](assets/image-3.png)
 
 The basic graspable area is shown in the figure below, covering approximately 80% of the workspace.
 
-![img](https://w79rvfxw83.feishu.cn/space/api/box/stream/download/asynccode/?code=NDhjNmE4MTA0YjJmZTFlMGU4OTc1YzFlYmU3YTBkMGVfbnh5WmUyVWpqeXZvVWpiWlNQaU9UZ0hKZFRvTUduMU5fVG9rZW46Q01mbGJzTUlJb01CZ1Z4cEhqMmNKRFVSbmVjXzE3NTI4MjgxNTQ6MTc1MjgzMTc1NF9WNA)
+![抓取工作区示例](assets/image.png)
 
 #### Debug
 
 1. If the observe pose and place pose need to be changed, you can enter gravity compensaton mode, drag arm to the property pose, and copy the pose, Modify them in the `config/sam_simplegrasp.yaml`
-![image-20250718164005357](/home/peng/snap/typora/96/.config/Typora/typora-user-images/image-20250718164005357.png)
+![机械臂位姿调整示例](assets/image-3.png)
 
 ## 语音控制抓取 demo
 
